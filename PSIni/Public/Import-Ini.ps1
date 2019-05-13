@@ -69,9 +69,9 @@ function Import-Ini {
         $sectionRegex = "^\s*\[(.+)\]\s*$"
         $keyRegex = "^\s*(.+?)\s*=\s*(['`"]?)(.*)\2\s*$"
 
-        Write-DebugMessage ("commentRegex is {0}." -f $commentRegex)
-        Write-DebugMessage ("section is {0}." -f $sectionRegex)
-        Write-DebugMessage ("key is {0}." -f $keyRegex)
+        # Write-DebugMessage ("commentRegex is {0}." -f $commentRegex)
+        # Write-DebugMessage ("section is {0}." -f $sectionRegex)
+        # Write-DebugMessage ("key is {0}." -f $keyRegex)
     }
 
     process {
@@ -80,67 +80,69 @@ function Import-Ini {
 
             $ini = New-Object System.Collections.Specialized.OrderedDictionary([System.StringComparer]::OrdinalIgnoreCase)
 
-            if (!(Test-Path $file)) {
-                Write-Error "Could not find file '$file'"
-            }
-
-            $commentCount = 0
-            switch -regex -file $file {
-                $sectionRegex {
-                    # Section
-                    $section = $matches[1]
-                    Write-Debug "$($MyInvocation.MyCommand.Name):: Adding section : $section"
-                    $ini[$section] = New-Object System.Collections.Specialized.OrderedDictionary([System.StringComparer]::OrdinalIgnoreCase)
-                    $CommentCount = 0
-                    continue
-                }
-                $commentRegex {
-                    # Comment
-                    if (!$IgnoreComments) {
-                        if (!(test-path "variable:local:section")) {
-                            $section = $script:NoSection
-                            $ini[$section] = New-Object System.Collections.Specialized.OrderedDictionary([System.StringComparer]::OrdinalIgnoreCase)
-                        }
-                        $value = $matches[1]
-                        $CommentCount++
-                        Write-DebugMessage ("Incremented CommentCount is now {0}." -f $CommentCount)
-                        $name = "Comment" + $CommentCount
-                        Write-Debug "$($MyInvocation.MyCommand.Name):: Adding $name with value: $value"
-                        $ini[$section][$name] = $value
-                    }
-                    else {
-                        Write-DebugMessage ("Ignoring comment {0}." -f $matches[1])
-                    }
-
-                    continue
-                }
-                $keyRegex {
-                    # Key
-                    if (!(test-path "variable:local:section")) {
-                        $section = $script:NoSection
+            if ((Test-Path $file)) {
+                $sectionBlock = $ini = @{}
+                $commentCount = 0
+                switch -regex -file $file {
+                    $sectionRegex {
+                        # Section
+                        $section = $matches[1]
+                        Write-Debug "$($MyInvocation.MyCommand.Name):: Adding section : $section"
                         $ini[$section] = New-Object System.Collections.Specialized.OrderedDictionary([System.StringComparer]::OrdinalIgnoreCase)
+                        $sectionBlock = $ini[$section]
+                        $CommentCount = 0
+                        continue
                     }
-                    $name, $value = $matches[1, 3]
-                    Write-Verbose "$($MyInvocation.MyCommand.Name):: Adding key $name with value: $value"
-                    if (-not $ini[$section][$name]) {
-                        $ini[$section][$name] = $value
-                    }
-                    else {
-                        if ($ini[$section][$name] -is [string]) {
-                            $oldValue = $ini[$section][$name]
-                            $ini[$section][$name] = [System.Collections.ArrayList]::new()
-                            $null = $ini[$section][$name].Add($oldValue)
-                            $null = $ini[$section][$name].Add($value)
+                    $commentRegex {
+                        # Comment
+                        if (!$IgnoreComments) {
+                            #if (!(test-path "variable:local:section")) {
+                            #    $section = $script:NoSection
+                            #    $ini[$section] = New-Object System.Collections.Specialized.OrderedDictionary([System.StringComparer]::OrdinalIgnoreCase)
+                            #}
+                            $value = $matches[1]
+                            $CommentCount++
+                            # Write-DebugMessage ("Incremented CommentCount is now {0}." -f $CommentCount)
+                            $name = "Comment" + $CommentCount
+                            Write-Debug "$($MyInvocation.MyCommand.Name):: Adding $name with value: $value"
+                            $sectionBlock[$name] = $value
                         }
                         else {
-                            $null = $ini[$section][$name].Add($value)
+                            # Write-DebugMessage ("Ignoring comment {0}." -f $matches[1])
                         }
-                    }
-                    continue
-                }
-            }
 
-            $ini
+                        continue
+                    }
+                    $keyRegex {
+                        # Key
+                        #if (!(test-path "variable:local:section")) {
+                        #    $section = $script:NoSection
+                        #    $ini[$section] = New-Object System.Collections.Specialized.OrderedDictionary([System.StringComparer]::OrdinalIgnoreCase)
+                        #}
+                        $name, $value = $matches[1, 3]
+                        Write-Verbose "$($MyInvocation.MyCommand.Name):: Adding key $name with value: $value"
+                        if (-not $sectionBlock[$name]) {
+                            $sectionBlock[$name] = $value
+                        }
+                        else {
+                            if ($sectionBlock[$name] -is [string]) {
+                                $oldValue = $ini[$section][$name]
+                                $sectionBlock[$name] = [System.Collections.ArrayList]::new()
+                                $null = $sectionBlock[$name].Add($oldValue)
+                                $null = $sectionBlock[$name].Add($value)
+                            }
+                            else {
+                                $null = $sectionBlock[$name].Add($value)
+                            }
+                        }
+                        continue
+                    }
+                }
+
+                $ini
+            } else {
+                Write-Error "Could not find file '$file'"
+            }
         }
     }
 
